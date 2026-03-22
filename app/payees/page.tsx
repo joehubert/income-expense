@@ -1,7 +1,8 @@
 'use client';
 
 // UC-4: Payee Summary
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { PayeeSummary } from '@/app/api/payees/route';
 
 type SortField = 'rawPayee' | 'count' | 'totalAmount';
@@ -27,13 +28,20 @@ function SortHeader({
   );
 }
 
-export default function PayeesPage() {
+function PayeesContent() {
+  const searchParams = useSearchParams();
+
   const [payees, setPayees]   = useState<PayeeSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
-  const [sortField, setSortField] = useState<SortField>('count');
-  const [order, setOrder]         = useState<'asc' | 'desc'>('desc');
+  const [showAll, setShowAll] = useState(() => searchParams.get('all') === '1');
+  const [sortField, setSortField] = useState<SortField>(() => {
+    const s = searchParams.get('sort');
+    return (s === 'rawPayee' || s === 'count' || s === 'totalAmount') ? s : 'count';
+  });
+  const [order, setOrder] = useState<'asc' | 'desc'>(() =>
+    searchParams.get('order') === 'asc' ? 'asc' : 'desc'
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,13 +58,29 @@ export default function PayeesPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  function updateUrl(field: SortField, ord: 'asc' | 'desc', all: boolean) {
+    const params = new URLSearchParams();
+    params.set('sort', field);
+    params.set('order', ord);
+    if (all) params.set('all', '1');
+    window.history.replaceState(null, '', `?${params.toString()}`);
+  }
+
   function handleSort(field: SortField) {
     if (sortField === field) {
-      setOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+      const newOrder = order === 'asc' ? 'desc' : 'asc';
+      setOrder(newOrder);
+      updateUrl(field, newOrder, showAll);
     } else {
       setSortField(field);
       setOrder('desc');
+      updateUrl(field, 'desc', showAll);
     }
+  }
+
+  function handleShowAll(val: boolean) {
+    setShowAll(val);
+    updateUrl(sortField, order, val);
   }
 
   const filtered = showAll ? payees : payees.filter((p) => p.isUnmatched);
@@ -87,7 +111,7 @@ export default function PayeesPage() {
             <input
               type="checkbox"
               checked={showAll}
-              onChange={(e) => setShowAll(e.target.checked)}
+              onChange={(e) => handleShowAll(e.target.checked)}
               className="rounded"
             />{' '}
             Show all payees
@@ -142,7 +166,7 @@ export default function PayeesPage() {
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     <a
-                      href={`/rules?newRule=1&payee=${encodeURIComponent(p.rawPayee)}`}
+                      href={`/rules?newRule=1&payee=${encodeURIComponent(p.rawPayee)}&returnTo=${encodeURIComponent(`/payees?sort=${sortField}&order=${order}${showAll ? '&all=1' : ''}`)}`}
                       className="text-xs text-blue-600 hover:underline mr-3"
                     >
                       Create Rule
@@ -161,5 +185,13 @@ export default function PayeesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function PayeesPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-gray-400">Loading…</p>}>
+      <PayeesContent />
+    </Suspense>
   );
 }

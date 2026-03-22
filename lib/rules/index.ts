@@ -108,6 +108,70 @@ export function rulesConflict(a: Rule, b: Rule): boolean {
   return rulesProduceDifferentActions(a, b);
 }
 
+export interface ConflictExplanation {
+  /** Why the two rules can match the same transaction. */
+  overlap: string[];
+  /** Which actions produce different results. */
+  actionDiffs: string[];
+}
+
+/**
+ * Returns a human-readable explanation of why two rules conflict.
+ * Assumes rulesConflict(a, b) === true.
+ */
+export function explainConflict(a: Rule, b: Rule): ConflictExplanation {
+  const overlap: string[] = [];
+  const actionDiffs: string[] = [];
+
+  // Payee overlap
+  if (a.payeePattern !== null && b.payeePattern !== null) {
+    if (a.payeeMatchType === 'exact' && b.payeeMatchType === 'exact' && a.payeePattern === b.payeePattern) {
+      overlap.push(`Both match exact payee "${a.payeePattern}"`);
+    } else {
+      overlap.push(`Payee patterns may overlap: "${a.payeePattern}" (${a.payeeMatchType}) and "${b.payeePattern}" (${b.payeeMatchType})`);
+    }
+  } else if (a.payeePattern === null && b.payeePattern === null) {
+    overlap.push('Neither rule filters by payee');
+  } else {
+    const withPattern = a.payeePattern !== null ? a : b;
+    overlap.push(`One rule matches any payee; the other matches "${withPattern.payeePattern}" (${withPattern.payeeMatchType})`);
+  }
+
+  // Account overlap
+  if (a.account !== null && b.account !== null && a.account === b.account) {
+    overlap.push(`Both filter to account "${a.account}"`);
+  } else if (a.account === null && b.account !== null) {
+    overlap.push(`One rule is account-agnostic; the other filters to "${b.account}"`);
+  } else if (a.account !== null && b.account === null) {
+    overlap.push(`One rule is account-agnostic; the other filters to "${a.account}"`);
+  }
+
+  // Amount overlap
+  const aHasAmount = a.amountMin !== null || a.amountMax !== null;
+  const bHasAmount = b.amountMin !== null || b.amountMax !== null;
+  if (aHasAmount && bHasAmount) {
+    const fmtMin = (v: number | null) => v === null ? '−∞' : String(v);
+    const fmtMax = (v: number | null) => v === null ? '+∞' : String(v);
+    overlap.push(
+      `Amount ranges overlap: $${fmtMin(a.amountMin)}–$${fmtMax(a.amountMax)} and $${fmtMin(b.amountMin)}–$${fmtMax(b.amountMax)}`
+    );
+  }
+
+  // Action differences
+  if (a.normalizedPayee !== b.normalizedPayee) {
+    actionDiffs.push(`Payee name: "${a.normalizedPayee ?? '(none)'}" vs "${b.normalizedPayee ?? '(none)'}"`);
+  }
+  if (a.category !== b.category || a.subCategory !== b.subCategory) {
+    const fmt = (r: Rule) => r.subCategory ? `${r.category} / ${r.subCategory}` : (r.category ?? '(none)');
+    actionDiffs.push(`Category: "${fmt(a)}" vs "${fmt(b)}"`);
+  }
+  if (a.isIgnored !== b.isIgnored) {
+    actionDiffs.push(`Ignore flag: ${a.isIgnored ? 'ignored' : 'not ignored'} vs ${b.isIgnored ? 'ignored' : 'not ignored'}`);
+  }
+
+  return { overlap, actionDiffs };
+}
+
 /** Returns a map of ruleId → Set of conflicting ruleIds. */
 export function buildConflictMap(rules: Rule[]): Map<string, Set<string>> {
   const map = new Map<string, Set<string>>();

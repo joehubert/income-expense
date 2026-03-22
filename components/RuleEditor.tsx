@@ -29,7 +29,7 @@ const EMPTY: FormState = {
   description: '',
   account: '',
   payeePattern: '',
-  payeeMatchType: 'substring',
+  payeeMatchType: 'exact',
   amountMin: '',
   amountMax: '',
   normalizedPayee: '',
@@ -44,10 +44,10 @@ export default function RuleEditor({ initial, onSave, onCancel }: RuleEditorProp
     description: initial?.description ?? '',
     account: initial?.account ?? '',
     payeePattern: initial?.payeePattern ?? '',
-    payeeMatchType: initial?.payeeMatchType ?? 'substring',
+    payeeMatchType: initial?.payeeMatchType ?? 'exact',
     amountMin: initial?.amountMin != null ? String(initial.amountMin) : '',
     amountMax: initial?.amountMax != null ? String(initial.amountMax) : '',
-    normalizedPayee: initial?.normalizedPayee ?? '',
+    normalizedPayee: initial?.normalizedPayee ?? initial?.payeePattern ?? '',
     category: initial?.category ?? '',
     subCategory: initial?.subCategory ?? '',
     isIgnored: initial?.isIgnored ?? false,
@@ -347,7 +347,7 @@ export default function RuleEditor({ initial, onSave, onCancel }: RuleEditorProp
       <div className="flex gap-3 pt-1">
         <button
           onClick={() => void handleSave()}
-          disabled={saving}
+          disabled={saving || newCategory.trim() !== '' || newSubCategory.trim() !== ''}
           className="rounded-md bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {saving ? 'Saving…' : 'Save Rule'}

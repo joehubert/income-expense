@@ -2,8 +2,9 @@
 
 // UC-3A: Rules List View
 import { Suspense, useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { Rule } from '@/types';
+import { explainConflict } from '@/lib/rules';
 import RuleEditor from '@/components/RuleEditor';
 import RuleDetailPanel from '@/components/RuleDetailPanel';
 
@@ -44,6 +45,7 @@ function actionSummary(rule: Rule): string {
 
 function RulesContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [rules, setRules] = useState<EnrichedRule[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
@@ -55,6 +57,8 @@ function RulesContent() {
   const prefillPayee = searchParams.get('payee') ?? '';
   const [showEditor, setShowEditor] = useState(searchParams.get('newRule') === '1');
   const [editingRule, setEditingRule] = useState<EnrichedRule | null>(null);
+
+  const [conflictDetailRule, setConflictDetailRule] = useState<EnrichedRule | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<EnrichedRule | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -89,8 +93,13 @@ function RulesContent() {
       body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error('Failed to create rule.');
-    await loadRules();
-    setShowEditor(false);
+    const returnTo = searchParams.get('returnTo');
+    if (returnTo) {
+      router.push(returnTo);
+    } else {
+      await loadRules();
+      setShowEditor(false);
+    }
   }
 
   async function handleSaveEdit(payload: Partial<Rule>) {
@@ -242,9 +251,12 @@ function RulesContent() {
                       <div className="text-gray-800 text-xs font-medium">{rule.description ?? conditionSummary(rule)}</div>
                       {rule.description && <div className="text-gray-400 text-xs">{conditionSummary(rule)}</div>}
                       {rule.conflictsWith.length > 0 && (
-                        <span className="mt-0.5 inline-block rounded-full bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-700">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConflictDetailRule(rule); }}
+                          className="mt-0.5 inline-block rounded-full bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-700 hover:bg-yellow-200"
+                        >
                           ⚠ {plural(rule.conflictsWith.length, 'conflict')}
-                        </span>
+                        </button>
                       )}
                     </td>
                     <td className="px-3 py-2 text-gray-600 text-xs">{actionSummary(rule)}</td>
@@ -293,10 +305,66 @@ function RulesContent() {
             </div>
             <div className="px-6 py-5">
               <RuleEditor
-                initial={editingRule ?? (prefillPayee ? { payeePattern: prefillPayee, payeeMatchType: 'substring' } : undefined)}
+                initial={editingRule ?? (prefillPayee ? { payeePattern: prefillPayee, payeeMatchType: 'exact' } : undefined)}
                 onSave={editingRule ? handleSaveEdit : handleSaveNew}
                 onCancel={() => { setShowEditor(false); setEditingRule(null); }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Conflict detail modal */}
+      {conflictDetailRule && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-16 px-4">
+          <div className="w-full max-w-xl bg-white rounded-xl shadow-2xl overflow-auto max-h-[80vh]">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-base font-semibold">
+                Conflicts for &ldquo;{conflictDetailRule.description ?? conditionSummary(conflictDetailRule)}&rdquo;
+              </h2>
+              <button onClick={() => setConflictDetailRule(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+            <div className="px-6 py-5 space-y-5">
+              {conflictDetailRule.conflictsWith.map((otherId) => {
+                const other = rules.find((r) => r.id === otherId);
+                if (!other) return null;
+                const { overlap, actionDiffs } = explainConflict(conflictDetailRule, other);
+                return (
+                  <div key={otherId} className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-gray-800">
+                          {other.description ?? conditionSummary(other)}
+                        </div>
+                        {other.description && (
+                          <div className="text-xs text-gray-500">{conditionSummary(other)}</div>
+                        )}
+                        <div className="text-xs text-gray-500 mt-0.5">Actions: {actionSummary(other)}</div>
+                      </div>
+                      <button
+                        onClick={() => { setConflictDetailRule(null); setEditingRule(other); setShowEditor(true); }}
+                        className="shrink-0 text-xs text-blue-600 hover:underline"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <div className="font-medium text-gray-600 mb-1">Why they can match the same transaction</div>
+                        <ul className="list-disc list-inside space-y-0.5 text-gray-700">
+                          {overlap.map((r, i) => <li key={i}>{r}</li>)}
+                        </ul>
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-600 mb-1">Actions that differ</div>
+                        <ul className="list-disc list-inside space-y-0.5 text-red-700">
+                          {actionDiffs.map((r, i) => <li key={i}>{r}</li>)}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
