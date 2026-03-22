@@ -6,9 +6,10 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import DateRangePicker, { type DateRange } from '@/components/reports/DateRangePicker';
 import ExpenseSummary from '@/components/reports/ExpenseSummary';
+import IncomeSummary from '@/components/reports/IncomeSummary';
 import IncomeExpenseTrend from '@/components/reports/IncomeExpenseTrend';
 
-type ReportTab = 'expense-summary' | 'income-expense';
+type ReportTab = 'expense-summary' | 'income-summary' | 'income-expense';
 
 interface ReportDef {
   id: ReportTab;
@@ -18,6 +19,7 @@ interface ReportDef {
 // Add future report types here — no structural refactoring needed.
 const REPORTS: ReportDef[] = [
   { id: 'expense-summary', label: 'Expense Summary' },
+  { id: 'income-summary',  label: 'Income Summary' },
   { id: 'income-expense',  label: 'Income vs. Expense' },
 ];
 
@@ -64,6 +66,7 @@ function ReportsContent() {
 
       {/* Report content — date range passed to active report */}
       {activeTab === 'expense-summary' && <ExpenseSummary dateRange={dateRange} />}
+      {activeTab === 'income-summary'  && <IncomeSummary dateRange={dateRange} />}
       {activeTab === 'income-expense'  && <IncomeExpenseTrend dateRange={dateRange} />}
     </div>
   );

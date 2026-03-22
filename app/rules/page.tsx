@@ -14,6 +14,8 @@ interface EnrichedRule extends Rule {
 }
 
 type Filter = 'all' | 'conflicting';
+type SortCol = 'conditions' | 'actions' | 'matched';
+type SortDir = 'asc' | 'desc';
 
 function plural(n: number, word: string): string {
   return n === 1 ? `1 ${word}` : `${n} ${word}s`;
@@ -49,6 +51,9 @@ function RulesContent() {
 
   const [rules, setRules] = useState<EnrichedRule[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
+  const [conditionFilter, setConditionFilter] = useState('');
+  const [sortCol, setSortCol] = useState<SortCol>('conditions');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,9 +87,41 @@ function RulesContent() {
 
   useEffect(() => { void loadRules(); }, [loadRules]);
 
-  const displayed = filter === 'conflicting'
-    ? rules.filter((r) => r.conflictsWith.length > 0)
-    : rules;
+  function handleSortClick(col: SortCol) {
+    if (sortCol === col) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  }
+
+  function sortIndicator(col: SortCol) {
+    if (sortCol !== col) return ' ↕';
+    return sortDir === 'asc' ? ' ↑' : ' ↓';
+  }
+
+  const filterLower = conditionFilter.toLowerCase();
+  const displayed = rules
+    .filter((r) => {
+      if (filter === 'conflicting' && r.conflictsWith.length === 0) return false;
+      if (filterLower) {
+        const haystack = (conditionSummary(r) + ' ' + (r.description ?? '')).toLowerCase();
+        if (!haystack.includes(filterLower)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      let cmp = 0;
+      if (sortCol === 'conditions') {
+        cmp = (a.description ?? conditionSummary(a)).localeCompare(b.description ?? conditionSummary(b));
+      } else if (sortCol === 'actions') {
+        cmp = actionSummary(a).localeCompare(actionSummary(b));
+      } else {
+        cmp = a.matchCount - b.matchCount;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
 
   async function handleSaveNew(payload: Partial<Rule>) {
     const res = await fetch('/api/rules', {
@@ -165,6 +202,17 @@ function RulesContent() {
           </button>
         </div>
 
+        {/* Condition filter */}
+        <div className="mb-3">
+          <input
+            type="text"
+            value={conditionFilter}
+            onChange={(e) => setConditionFilter(e.target.value)}
+            placeholder="Filter by condition…"
+            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
         {/* Filter bar */}
         <div className="flex gap-1 mb-3">
           {(['all', 'conflicting'] as Filter[]).map((f) => (
@@ -234,9 +282,21 @@ function RulesContent() {
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-3 py-2 text-left font-medium text-gray-600">Conditions</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-600">Actions</th>
-                  <th className="px-3 py-2 text-right font-medium text-gray-600">Matched</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <button onClick={() => handleSortClick('conditions')} className="hover:text-gray-900">
+                      Conditions{sortIndicator('conditions')}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <button onClick={() => handleSortClick('actions')} className="hover:text-gray-900">
+                      Actions{sortIndicator('actions')}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium text-gray-600">
+                    <button onClick={() => handleSortClick('matched')} className="hover:text-gray-900">
+                      Matched{sortIndicator('matched')}
+                    </button>
+                  </th>
                   <th className="px-3 py-2"></th>
                 </tr>
               </thead>

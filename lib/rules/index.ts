@@ -83,6 +83,20 @@ function rulesProduceDifferentActions(a: Rule, b: Rule): boolean {
   );
 }
 
+/**
+ * If a regex is ^-anchored with a literal prefix (no special chars), returns
+ * that prefix lowercased. Returns null otherwise.
+ * Used to detect non-overlap between two anchored patterns.
+ */
+function anchoredLiteralPrefix(pattern: string): string | null {
+  if (!pattern.startsWith('^')) return null;
+  const rest = pattern.slice(1);
+  let i = 0;
+  while (i < rest.length && !/[.*+?${}[\]|()\\]/.test(rest[i])) i++;
+  if (i === 0) return null;
+  return rest.slice(0, i).toLowerCase();
+}
+
 /** Returns true if two rules can conflict (same specificity, overlapping conditions, different actions). */
 export function rulesConflict(a: Rule, b: Rule): boolean {
   if (a.id === b.id) return false;
@@ -91,14 +105,26 @@ export function rulesConflict(a: Rule, b: Rule): boolean {
   // Account: both non-null and different → cannot match same transaction
   if (a.account !== null && b.account !== null && a.account !== b.account) return false;
 
-  // Payee: both exact and different strings → cannot match same transaction
-  if (
-    a.payeePattern !== null &&
-    b.payeePattern !== null &&
-    a.payeeMatchType === 'exact' &&
-    b.payeeMatchType === 'exact' &&
-    a.payeePattern !== b.payeePattern
-  ) return false;
+  // Payee: rule out conflicts where the patterns provably can't match the same string
+  if (a.payeePattern !== null && b.payeePattern !== null) {
+    if (a.payeeMatchType === 'exact' && b.payeeMatchType === 'exact') {
+      // Both exact — different strings can't match the same transaction
+      if (a.payeePattern !== b.payeePattern) return false;
+    } else if (a.payeeMatchType === 'exact') {
+      // a is exact: the only value that could satisfy a is a.payeePattern itself.
+      // If b's pattern doesn't match that string, they can never share a transaction.
+      if (!matchPayee(b.payeePattern, b.payeeMatchType, a.payeePattern)) return false;
+    } else if (b.payeeMatchType === 'exact') {
+      // b is exact: same logic in reverse.
+      if (!matchPayee(a.payeePattern, a.payeeMatchType, b.payeePattern)) return false;
+    }
+    // Both regex: if both are ^-anchored with distinct literal prefixes, they can't overlap
+    if (a.payeeMatchType === 'regex' && b.payeeMatchType === 'regex') {
+      const pA = anchoredLiteralPrefix(a.payeePattern);
+      const pB = anchoredLiteralPrefix(b.payeePattern);
+      if (pA !== null && pB !== null && !pA.startsWith(pB) && !pB.startsWith(pA)) return false;
+    }
+  }
 
   // Amount: both have ranges and they don't overlap
   const aHasAmount = a.amountMin !== null || a.amountMax !== null;
