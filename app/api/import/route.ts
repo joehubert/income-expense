@@ -21,11 +21,12 @@ interface ImportRequest {
   accountName: string;
   source: string;       // original filename
   fingerprint: string;
+  invertAmounts?: boolean;
 }
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as ImportRequest;
-  const { rows, mapping, accountName, source } = body;
+  const { rows, mapping, accountName, source, invertAmounts } = body;
 
   const imported: Transaction[] = [];
   const errors: string[] = [];
@@ -37,7 +38,8 @@ export async function POST(req: NextRequest) {
     const rawAmount = row[mapping.amount] ?? '';
 
     const date = parseDate(rawDate);
-    const amount = parseAmount(rawAmount);
+    const parsed = parseAmount(rawAmount);
+    const amount = parsed !== null && invertAmounts ? -parsed : parsed;
 
     if (!date) {
       errors.push(`Row ${i + 2}: invalid date "${rawDate}"`);

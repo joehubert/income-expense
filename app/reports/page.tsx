@@ -8,8 +8,9 @@ import DateRangePicker, { type DateRange } from '@/components/reports/DateRangeP
 import ExpenseSummary from '@/components/reports/ExpenseSummary';
 import IncomeSummary from '@/components/reports/IncomeSummary';
 import IncomeExpenseTrend from '@/components/reports/IncomeExpenseTrend';
+import ExpenseTrend from '@/components/reports/ExpenseTrend';
 
-type ReportTab = 'expense-summary' | 'income-summary' | 'income-expense';
+type ReportTab = 'expense-summary' | 'income-summary' | 'income-expense' | 'expense-trend';
 
 interface ReportDef {
   id: ReportTab;
@@ -21,6 +22,7 @@ const REPORTS: ReportDef[] = [
   { id: 'expense-summary', label: 'Expense Summary' },
   { id: 'income-summary',  label: 'Income Summary' },
   { id: 'income-expense',  label: 'Income vs. Expense' },
+  { id: 'expense-trend',   label: 'Expense Trend' },
 ];
 
 function ReportsContent() {
@@ -68,6 +70,7 @@ function ReportsContent() {
       {activeTab === 'expense-summary' && <ExpenseSummary dateRange={dateRange} />}
       {activeTab === 'income-summary'  && <IncomeSummary dateRange={dateRange} />}
       {activeTab === 'income-expense'  && <IncomeExpenseTrend dateRange={dateRange} />}
+      {activeTab === 'expense-trend'   && <ExpenseTrend dateRange={dateRange} />}
     </div>
   );
 }

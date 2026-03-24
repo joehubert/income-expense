@@ -3,7 +3,7 @@
 // UC-1: Import CSV File
 import { useRef, useState } from 'react';
 import Papa from 'papaparse';
-import { computeFingerprint } from '@/lib/csv';
+import { computeFingerprint, parseAmount } from '@/lib/csv';
 import type { ColumnMapping } from '@/types';
 
 type Step = 'select' | 'map' | 'preview' | 'importing' | 'done';
@@ -35,9 +35,23 @@ export default function ImportPage() {
   const [savedNotice, setSavedNotice] = useState(false);
   const [mapping, setMapping] = useState<MappingFields>({ date: '', payee: '', amount: '', account: '' });
   const [accountName, setAccountName] = useState('');
+  const [invertAmounts, setInvertAmounts] = useState(false);
+  const [dismissedInvertNotice, setDismissedInvertNotice] = useState(false);
   const [previewRows, setPreviewRows] = useState<RawRow[]>([]);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-detect: warn when >70% of amounts in the selected column are positive
+  const mostAmountsPositive = (() => {
+    if (!mapping.amount || allRows.length < 3) return false;
+    const values = allRows
+      .map((r) => parseAmount(r[mapping.amount] ?? ''))
+      .filter((v): v is number => v !== null);
+    if (values.length < 3) return false;
+    return values.filter((v) => v > 0).length / values.length > 0.7;
+  })();
+
+  const showInvertNotice = mostAmountsPositive && !invertAmounts && !dismissedInvertNotice;
 
   function reset() {
     setStep('select');
@@ -48,6 +62,8 @@ export default function ImportPage() {
     setSavedNotice(false);
     setMapping({ date: '', payee: '', amount: '', account: '' });
     setAccountName('');
+    setInvertAmounts(false);
+    setDismissedInvertNotice(false);
     setPreviewRows([]);
     setSummary(null);
     setError(null);
@@ -86,6 +102,7 @@ export default function ImportPage() {
               account: data.mapping.mappings.account ?? '',
             });
             setAccountName(data.mapping.accountName);
+            setInvertAmounts(data.mapping.invertAmounts ?? false);
             setSavedNotice(true);
           } else {
             setSavedNotice(false);
@@ -132,6 +149,7 @@ export default function ImportPage() {
           amount: mapping.amount,
           ...(mapping.account ? { account: mapping.account } : {}),
         },
+        invertAmounts,
         createdAt: new Date().toISOString(),
       };
       await fetch('/api/column-mappings', {
@@ -155,6 +173,7 @@ export default function ImportPage() {
           accountName: accountName.trim(),
           source: fileName,
           fingerprint,
+          invertAmounts,
         }),
       });
       const result = (await res.json()) as ImportSummary;
@@ -222,6 +241,38 @@ export default function ImportPage() {
               onChange={(v) => setMapping((m) => ({ ...m, amount: v }))} />
             <ColumnSelect label="Account (optional)" value={mapping.account} headers={headers} optional
               onChange={(v) => setMapping((m) => ({ ...m, account: v }))} />
+
+            {showInvertNotice && (
+              <div className="rounded-md bg-yellow-50 border border-yellow-200 px-4 py-2 text-sm text-yellow-800 flex items-start gap-2">
+                <span className="flex-1">
+                  Most amounts in this file are positive. If expenses are stored as positive values, enable &ldquo;Invert amount signs&rdquo; below.
+                </span>
+                <button
+                  onClick={() => setDismissedInvertNotice(true)}
+                  className="text-yellow-600 hover:text-yellow-900 font-medium leading-none mt-0.5"
+                  aria-label="Dismiss"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <input
+                id="invertAmounts"
+                type="checkbox"
+                checked={invertAmounts}
+                onChange={(e) => {
+                  setInvertAmounts(e.target.checked);
+                  setDismissedInvertNotice(true);
+                }}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="invertAmounts" className="text-sm font-medium text-gray-700">
+                Invert amount signs
+              </label>
+              <span className="text-xs text-gray-500">(enable if this file stores expenses as positive values)</span>
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Account Name *</label>

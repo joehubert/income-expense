@@ -51,6 +51,7 @@ export interface ColumnMapping {
     amount: string;
     account?: string;   // Optional: if present in CSV
   };
+  invertAmounts?: boolean; // True if this CSV stores expenses as positive values
   createdAt: string;    // ISO 8601
 }
 
