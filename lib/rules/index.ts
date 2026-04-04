@@ -118,8 +118,11 @@ export function rulesConflict(a: Rule, b: Rule): boolean {
       // b is exact: same logic in reverse.
       if (!matchPayee(a.payeePattern, a.payeeMatchType, b.payeePattern)) return false;
     }
-    // Both regex: if both are ^-anchored with distinct literal prefixes, they can't overlap
-    if (a.payeeMatchType === 'regex' && b.payeeMatchType === 'regex') {
+    // If both patterns are ^-anchored with distinct literal prefixes, they can't overlap.
+    // This applies to regex (where ^ is a start anchor) and to substring patterns that
+    // start with '^' (which requires a literal '^' in the payee — essentially impossible
+    // in real transaction data, so treat as anchored for conflict purposes).
+    if (a.payeeMatchType !== 'exact' && b.payeeMatchType !== 'exact') {
       const pA = anchoredLiteralPrefix(a.payeePattern);
       const pB = anchoredLiteralPrefix(b.payeePattern);
       if (pA !== null && pB !== null && !pA.startsWith(pB) && !pB.startsWith(pA)) return false;
