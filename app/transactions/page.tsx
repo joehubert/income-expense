@@ -112,6 +112,18 @@ function TransactionsContent() {
   }
 
   function handleSaved(updated: Transaction) {
+    if (updated.isIgnored) {
+      setData((prev) =>
+        prev
+          ? { ...prev, transactions: prev.transactions.filter((t) => t.id !== updated.id), total: prev.total - 1 }
+          : prev
+      );
+      setSelectedTx(null);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('id');
+      router.replace(`/transactions?${params.toString()}`);
+      return;
+    }
     setData((prev) =>
       prev
         ? { ...prev, transactions: prev.transactions.map((t) => (t.id === updated.id ? updated : t)) }

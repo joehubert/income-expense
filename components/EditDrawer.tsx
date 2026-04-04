@@ -15,6 +15,7 @@ export default function EditDrawer({ transaction: t, onClose, onSaved }: EditDra
   const [category, setCategory] = useState(t.category ?? '');
   const [subCategory, setSubCategory] = useState(t.subCategory ?? '');
   const [notes, setNotes] = useState(t.notes ?? '');
+  const [isIgnored, setIsIgnored] = useState(t.isIgnored);
   const [categories, setCategories] = useState<CategoryEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,8 +33,9 @@ export default function EditDrawer({ transaction: t, onClose, onSaved }: EditDra
     setCategory(t.category ?? '');
     setSubCategory(t.subCategory ?? '');
     setNotes(t.notes ?? '');
+    setIsIgnored(t.isIgnored);
     setError(null);
-  }, [t.id, t.normalizedPayee, t.category, t.subCategory, t.notes]);
+  }, [t.id, t.normalizedPayee, t.category, t.subCategory, t.notes, t.isIgnored]);
 
   const categoryNames = [...new Set(categories.map((c) => c.category))].sort((a, b) => a.localeCompare(b));
   const subCategoryNames = [
@@ -52,6 +54,7 @@ export default function EditDrawer({ transaction: t, onClose, onSaved }: EditDra
           category: category || null,
           subCategory: subCategory || null,
           notes: notes || null,
+          isIgnored,
         }),
       });
       if (!res.ok) throw new Error('Save failed.');
@@ -145,6 +148,22 @@ export default function EditDrawer({ transaction: t, onClose, onSaved }: EditDra
               rows={3}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+
+          <div className={`rounded-md border px-3 py-3 ${isIgnored ? 'border-amber-200 bg-amber-50' : 'border-gray-200'}`}>
+            <div className="flex items-start gap-2">
+              <input
+                id="ignore-toggle"
+                type="checkbox"
+                checked={isIgnored}
+                onChange={(e) => setIsIgnored(e.target.checked)}
+                className="mt-0.5 rounded cursor-pointer"
+              />
+              <label htmlFor="ignore-toggle" className="cursor-pointer">
+                <p className="text-sm font-medium text-gray-700">Ignore this transaction</p>
+                <p className="text-xs text-gray-500">Excluded from all reports and analysis.</p>
+              </label>
+            </div>
           </div>
 
           {/* Read-only info */}

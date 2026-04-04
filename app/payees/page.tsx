@@ -126,7 +126,7 @@ function PayeesContent() {
       {loading && <p className="text-sm text-gray-400">Loading…</p>}
       {!loading && sorted.length === 0 && (
         <div className="text-center py-16 text-gray-400 text-sm">
-          {showAll ? 'No payees yet — import a CSV to get started.' : 'All payees have matching rules.'}
+          {showAll ? 'No payees yet — import a CSV to get started.' : 'All payees are categorized.'}
         </div>
       )}
       {!loading && sorted.length > 0 && (

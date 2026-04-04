@@ -57,6 +57,7 @@ export async function GET() {
   for (const [rawPayee, txns] of groups) {
     const amounts = txns.map((t) => t.amount);
     const matchedRule = findMatchingRule(rawPayee, rules);
+    const allCategorized = txns.every((t) => t.category !== null);
     payees.push({
       rawPayee,
       count: txns.length,
@@ -66,7 +67,7 @@ export async function GET() {
       matchedRule: matchedRule
         ? { id: matchedRule.id, description: matchedRule.description }
         : null,
-      isUnmatched: matchedRule === null,
+      isUnmatched: matchedRule === null && !allCategorized,
     });
   }
 

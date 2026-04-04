@@ -19,9 +19,16 @@ export async function GET() {
   const transactions = readTransactions().filter((t) => !t.isDiscarded && !t.isIgnored);
   const rules = readRules();
 
-  // Distinct payees with no matching rule
-  const uniquePayees = [...new Set(transactions.map((t) => t.rawPayee))];
-  const payeesWithNoRule = uniquePayees.filter((p) => !payeeHasRule(p, rules)).length;
+  // Distinct payees with no matching rule and at least one uncategorized transaction
+  const groups = new Map<string, Transaction[]>();
+  for (const t of transactions) {
+    const existing = groups.get(t.rawPayee) ?? [];
+    existing.push(t);
+    groups.set(t.rawPayee, existing);
+  }
+  const payeesWithNoRule = [...groups.entries()].filter(
+    ([payee, txns]) => !payeeHasRule(payee, rules) && txns.some((t) => t.category === null)
+  ).length;
 
   // Conflicting rules
   const conflictMap = buildConflictMap(rules);
