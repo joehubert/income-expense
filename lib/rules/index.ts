@@ -90,7 +90,9 @@ function rulesProduceDifferentActions(a: Rule, b: Rule): boolean {
  */
 function anchoredLiteralPrefix(pattern: string): string | null {
   if (!pattern.startsWith('^')) return null;
-  const rest = pattern.slice(1);
+  let rest = pattern.slice(1);
+  // Strip inline case-insensitive flag — we lowercase the result anyway
+  if (rest.startsWith('(?i)')) rest = rest.slice(4);
   let i = 0;
   while (i < rest.length && !/[.*+?${}[\]|()\\]/.test(rest[i])) i++;
   if (i === 0) return null;
