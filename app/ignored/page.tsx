@@ -4,16 +4,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { IgnoredTransaction } from '@/app/api/ignored/route';
 
+type SortCol = 'date' | 'account' | 'rawPayee' | 'amount' | 'reason';
+type SortDir = 'asc' | 'desc';
+
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
 
 export default function IgnoredPage() {
   const [transactions, setTransactions] = useState<IgnoredTransaction[]>([]);
-  const [totalAmount, setTotalAmount]   = useState(0);
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState<string | null>(null);
   const [selected, setSelected]         = useState<Set<string>>(new Set());
   const [saving, setSaving]             = useState(false);
+
+  const [filterText, setFilterText] = useState('');
+  const [sortCol, setSortCol]       = useState<SortCol>('date');
+  const [sortDir, setSortDir]       = useState<SortDir>('desc');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -22,7 +28,6 @@ export default function IgnoredPage() {
       const res = await fetch('/api/ignored');
       const data = (await res.json()) as { transactions: IgnoredTransaction[]; totalAmount: number };
       setTransactions(data.transactions);
-      setTotalAmount(data.totalAmount);
       setSelected(new Set());
     } catch {
       setError('Failed to load ignored transactions.');
@@ -42,10 +47,10 @@ export default function IgnoredPage() {
   }
 
   function toggleAll() {
-    if (selected.size === transactions.length) {
+    if (selected.size === displayed.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(transactions.map((t) => t.id)));
+      setSelected(new Set(displayed.map((t) => t.id)));
     }
   }
 
@@ -68,7 +73,50 @@ export default function IgnoredPage() {
     }
   }
 
-  const allSelected = transactions.length > 0 && selected.size === transactions.length;
+  function handleSortClick(col: SortCol) {
+    if (sortCol === col) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortCol(col);
+      setSortDir(col === 'date' ? 'desc' : 'asc');
+    }
+  }
+
+  function sortIndicator(col: SortCol) {
+    if (sortCol !== col) return ' ↕';
+    return sortDir === 'asc' ? ' ↑' : ' ↓';
+  }
+
+  const filterLower = filterText.toLowerCase();
+  const displayed = transactions
+    .filter((t) => {
+      if (!filterLower) return true;
+      return (
+        t.date.includes(filterLower) ||
+        t.account.toLowerCase().includes(filterLower) ||
+        t.rawPayee.toLowerCase().includes(filterLower) ||
+        t.reason.toLowerCase().includes(filterLower) ||
+        fmt(t.amount).includes(filterLower)
+      );
+    })
+    .sort((a, b) => {
+      let cmp = 0;
+      if (sortCol === 'date') {
+        cmp = a.date.localeCompare(b.date);
+      } else if (sortCol === 'account') {
+        cmp = a.account.localeCompare(b.account);
+      } else if (sortCol === 'rawPayee') {
+        cmp = a.rawPayee.localeCompare(b.rawPayee);
+      } else if (sortCol === 'amount') {
+        cmp = a.amount - b.amount;
+      } else {
+        cmp = a.reason.localeCompare(b.reason);
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+  const displayedTotal = displayed.reduce((s, t) => s + t.amount, 0);
+  const allSelected = displayed.length > 0 && displayed.every((t) => selected.has(t.id));
   const someSelected = selected.size > 0;
 
   return (
@@ -90,11 +138,27 @@ export default function IgnoredPage() {
         <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</div>
       )}
 
+      {/* Filter input */}
+      {!loading && transactions.length > 0 && (
+        <div className="mb-3">
+          <input
+            type="text"
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+            placeholder="Filter by date, account, payee, amount, or reason…"
+            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      )}
+
       {/* Summary bar */}
       {!loading && transactions.length > 0 && (
         <div className="mb-4 flex gap-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
-          <span><strong>{transactions.length}</strong> ignored transaction{transactions.length === 1 ? '' : 's'}</span>
-          <span>Total: <strong className={totalAmount >= 0 ? 'text-green-700' : 'text-red-700'}>{fmt(totalAmount)}</strong></span>
+          <span>
+            <strong>{displayed.length}</strong>
+            {filterText ? ` of ${transactions.length}` : ''} ignored transaction{displayed.length === 1 ? '' : 's'}
+          </span>
+          <span>Total: <strong className={displayedTotal >= 0 ? 'text-green-700' : 'text-red-700'}>{fmt(displayedTotal)}</strong></span>
         </div>
       )}
 
@@ -104,7 +168,12 @@ export default function IgnoredPage() {
           No ignored transactions.
         </div>
       )}
-      {!loading && transactions.length > 0 && (
+      {!loading && transactions.length > 0 && displayed.length === 0 && (
+        <div className="text-center py-16 text-gray-400 text-sm">
+          No transactions match your filter.
+        </div>
+      )}
+      {!loading && displayed.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50">
@@ -118,16 +187,36 @@ export default function IgnoredPage() {
                     title={allSelected ? 'Deselect all' : 'Select all'}
                   />
                 </th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Date</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Account</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Payee</th>
-                <th className="px-3 py-2 text-right font-medium text-gray-600">Amount</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Reason</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">
+                  <button onClick={() => handleSortClick('date')} className="hover:text-gray-900">
+                    Date{sortIndicator('date')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">
+                  <button onClick={() => handleSortClick('account')} className="hover:text-gray-900">
+                    Account{sortIndicator('account')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">
+                  <button onClick={() => handleSortClick('rawPayee')} className="hover:text-gray-900">
+                    Payee{sortIndicator('rawPayee')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-right font-medium text-gray-600">
+                  <button onClick={() => handleSortClick('amount')} className="hover:text-gray-900">
+                    Amount{sortIndicator('amount')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">
+                  <button onClick={() => handleSortClick('reason')} className="hover:text-gray-900">
+                    Reason{sortIndicator('reason')}
+                  </button>
+                </th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {transactions.map((t) => (
+              {displayed.map((t) => (
                 <tr
                   key={t.id}
                   onClick={() => toggleSelect(t.id)}
