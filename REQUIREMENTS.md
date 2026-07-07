@@ -141,7 +141,7 @@ When multiple rules match a single transaction, the most specific rule wins. Spe
 | 6 | Account only |
 | 7 (lowest) | Amount range only |
 
-If two rules share identical specificity and overlapping match conditions but produce different actions, they are a **conflict**. The system surfaces conflicts in the UI and does not silently pick one.
+If two rules share identical specificity and overlapping match conditions but produce different actions, they are a **conflict**. The system surfaces conflicts in the UI and does not silently pick one. Overlap is determined against actual data: two rules conflict only if at least one existing (non-discarded) transaction is matched by both. Pattern-level overlap that matches no real transaction is not reported; conflicts are recomputed on every read, so such a pair is flagged as soon as an import brings in a transaction matching both rules.
 
 ### 2.4 Column Mapping
 

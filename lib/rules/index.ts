@@ -203,19 +203,48 @@ export function explainConflict(a: Rule, b: Rule): ConflictExplanation {
   return { overlap, actionDiffs };
 }
 
-/** Returns a map of ruleId → Set of conflicting ruleIds. */
-export function buildConflictMap(rules: Rule[]): Map<string, Set<string>> {
+/**
+ * Returns a map of ruleId → Set of conflicting ruleIds.
+ *
+ * A pattern-level conflict (rulesConflict) is only reported if at least one
+ * actual transaction is matched by both rules — pattern overlap alone can be
+ * a theoretical string that never occurs in real data (Section 2.3).
+ * Conflicts are recomputed on every read, so a pair that is silent today
+ * will surface as soon as an import brings in a transaction matching both.
+ */
+export function buildConflictMap(
+  rules: Rule[],
+  transactions: Transaction[]
+): Map<string, Set<string>> {
   const map = new Map<string, Set<string>>();
   for (const r of rules) map.set(r.id, new Set());
+
+  const active = transactions.filter((t) => !t.isDiscarded);
+  const matchedIds = rules.map((r) => {
+    const ids = new Set<string>();
+    for (const t of active) {
+      if (matchesRule(r, t)) ids.add(t.id);
+    }
+    return ids;
+  });
+
   for (let i = 0; i < rules.length; i++) {
     for (let j = i + 1; j < rules.length; j++) {
-      if (rulesConflict(rules[i], rules[j])) {
-        map.get(rules[i].id)?.add(rules[j].id);
-        map.get(rules[j].id)?.add(rules[i].id);
-      }
+      if (!rulesConflict(rules[i], rules[j])) continue;
+      if (!setsIntersect(matchedIds[i], matchedIds[j])) continue;
+      map.get(rules[i].id)?.add(rules[j].id);
+      map.get(rules[j].id)?.add(rules[i].id);
     }
   }
   return map;
+}
+
+function setsIntersect(a: Set<string>, b: Set<string>): boolean {
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+  for (const id of small) {
+    if (large.has(id)) return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------

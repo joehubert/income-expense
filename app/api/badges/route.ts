@@ -16,7 +16,8 @@ function payeeHasRule(rawPayee: string, rules: Rule[]): boolean {
 }
 
 export async function GET() {
-  const transactions = readTransactions().filter((t) => !t.isDiscarded && !t.isIgnored);
+  const allTransactions = readTransactions();
+  const transactions = allTransactions.filter((t) => !t.isDiscarded && !t.isIgnored);
   const rules = readRules();
 
   // Distinct payees with no matching rule and at least one uncategorized transaction
@@ -30,8 +31,9 @@ export async function GET() {
     ([payee, txns]) => !payeeHasRule(payee, rules) && txns.some((t) => t.category === null)
   ).length;
 
-  // Conflicting rules
-  const conflictMap = buildConflictMap(rules);
+  // Conflicting rules — grounded in actual transactions (includes ignored,
+  // since rules can target them; buildConflictMap excludes discarded itself)
+  const conflictMap = buildConflictMap(rules, allTransactions);
   const conflictingRules = [...conflictMap.values()].filter((s) => s.size > 0).length;
 
   // Unresolved duplicate groups (transactions where isDuplicate=true and isDiscarded=false)

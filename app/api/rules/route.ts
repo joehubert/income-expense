@@ -8,7 +8,7 @@ import type { Rule } from '@/types';
 export async function GET() {
   const rules = readRules();
   const transactions = readTransactions();
-  const conflictMap = buildConflictMap(rules);
+  const conflictMap = buildConflictMap(rules, transactions);
 
   const enriched = rules.map((r) => ({
     ...r,
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   writeTransactions(updated);
 
   // Compute conflict info for the new rule
-  const conflictMap = buildConflictMap(rules);
+  const conflictMap = buildConflictMap(rules, updated);
   const enriched = {
     ...rule,
     matchCount: updated.filter((t) => !t.isDiscarded && matchesRule(rule, t)).length,

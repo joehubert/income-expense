@@ -10,6 +10,12 @@ interface RuleEditorProps {
   onCancel: () => void;
 }
 
+interface MatchPreview {
+  count: number;
+  payeeCount: number;
+  samplePayees: { rawPayee: string; count: number }[];
+}
+
 type MatchType = 'substring' | 'exact' | 'regex';
 
 interface FormState {
@@ -29,7 +35,7 @@ const EMPTY: FormState = {
   description: '',
   account: '',
   payeePattern: '',
-  payeeMatchType: 'exact',
+  payeeMatchType: 'substring',
   amountMin: '',
   amountMax: '',
   normalizedPayee: '',
@@ -44,7 +50,7 @@ export default function RuleEditor({ initial, onSave, onCancel }: RuleEditorProp
     description: initial?.description ?? '',
     account: initial?.account ?? '',
     payeePattern: initial?.payeePattern ?? '',
-    payeeMatchType: initial?.payeeMatchType ?? 'exact',
+    payeeMatchType: initial?.payeeMatchType ?? 'substring',
     amountMin: initial?.amountMin != null ? String(initial.amountMin) : '',
     amountMax: initial?.amountMax != null ? String(initial.amountMax) : '',
     normalizedPayee: initial?.normalizedPayee ?? initial?.payeePattern ?? '',
@@ -61,6 +67,36 @@ export default function RuleEditor({ initial, onSave, onCancel }: RuleEditorProp
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<string[]>([]);
+  const [preview, setPreview] = useState<MatchPreview | null>(null);
+
+  // UC-3B: live match preview — show how many existing transactions the
+  // draft conditions would catch, so the user can tell whether a pattern
+  // generalizes before saving.
+  useEffect(() => {
+    const hasAnyCondition = !!(form.account || form.payeePattern || form.amountMin || form.amountMax);
+    if (!hasAnyCondition) {
+      setPreview(null);
+      return;
+    }
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      fetch('/api/rules/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account: form.account || null,
+          payeePattern: form.payeePattern || null,
+          payeeMatchType: form.payeeMatchType,
+          amountMin: form.amountMin !== '' ? parseFloat(form.amountMin) : null,
+          amountMax: form.amountMax !== '' ? parseFloat(form.amountMax) : null,
+        }),
+      })
+        .then((r) => r.json())
+        .then((d: MatchPreview) => { if (!cancelled) setPreview(d); })
+        .catch(() => null); // preview is best-effort
+    }, 350);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [form.account, form.payeePattern, form.payeeMatchType, form.amountMin, form.amountMax]);
 
   useEffect(() => {
     let done = 0;
@@ -248,6 +284,31 @@ export default function RuleEditor({ initial, onSave, onCancel }: RuleEditorProp
             />
           </div>
         </div>
+
+        {/* Live match preview (UC-3B) */}
+        {preview && (
+          <div className="rounded-md bg-gray-100 px-3 py-2 text-xs space-y-1">
+            {preview.count === 0 ? (
+              <p className="text-orange-700">No existing transactions match these conditions.</p>
+            ) : (
+              <>
+                <p className="text-gray-700">
+                  Matches <span className="font-semibold">{preview.count}</span> existing transaction{preview.count !== 1 ? 's' : ''} across{' '}
+                  <span className="font-semibold">{preview.payeeCount}</span> payee{preview.payeeCount !== 1 ? 's' : ''}.
+                </p>
+                <p className="text-gray-500 truncate" title={preview.samplePayees.map((p) => p.rawPayee).join(', ')}>
+                  {preview.samplePayees.map((p) => `${p.rawPayee} (${p.count})`).join(' · ')}
+                  {preview.payeeCount > preview.samplePayees.length ? ' · …' : ''}
+                </p>
+                {preview.payeeCount === 1 && form.payeePattern.trim().length >= 12 && (
+                  <p className="text-orange-700">
+                    Only one payee matches — a shorter pattern may also catch future variants of this merchant.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </fieldset>
 
       {/* Actions */}

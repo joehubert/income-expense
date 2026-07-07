@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Rule } from '@/types';
 import { explainConflict } from '@/lib/rules';
+import { derivePayeeStem } from '@/lib/payees';
 import RuleEditor from '@/components/RuleEditor';
 import RuleDetailPanel from '@/components/RuleDetailPanel';
 
@@ -58,8 +59,19 @@ function RulesContent() {
   const [error, setError] = useState<string | null>(null);
 
   const [selectedRule, setSelectedRule] = useState<EnrichedRule | null>(null);
-  // Pre-fill editor when arriving via ?newRule=1&payee=xxx from payees page
-  const prefillPayee = searchParams.get('payee') ?? '';
+  // Pre-fill editor when arriving via ?newRule=1&payee=xxx from payees page (UC-4).
+  // The raw payee is reduced to a stable merchant stem so the suggested
+  // substring pattern matches future imports, not just this exact string.
+  const prefillPayee = searchParams.get('payee');
+  let prefillInitial: Partial<Rule> | undefined;
+  if (prefillPayee) {
+    const stem = derivePayeeStem(prefillPayee);
+    prefillInitial = {
+      payeePattern: stem.pattern,
+      payeeMatchType: 'substring',
+      normalizedPayee: stem.normalizedPayee,
+    };
+  }
   const [showEditor, setShowEditor] = useState(searchParams.get('newRule') === '1');
   const [editingRule, setEditingRule] = useState<EnrichedRule | null>(null);
 
@@ -365,7 +377,7 @@ function RulesContent() {
             </div>
             <div className="px-6 py-5">
               <RuleEditor
-                initial={editingRule ?? (prefillPayee ? { payeePattern: prefillPayee, payeeMatchType: 'exact' } : undefined)}
+                initial={editingRule ?? prefillInitial}
                 onSave={editingRule ? handleSaveEdit : handleSaveNew}
                 onCancel={() => { setShowEditor(false); setEditingRule(null); }}
               />
